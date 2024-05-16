@@ -147,6 +147,7 @@ async def pause(ctx):
     voice_client = ctx.guild.voice_client
     if voice_client.is_playing():
         voice_client.pause()
+
     else:
         await ctx.send("Không có bài hát nào đang được phát")
 
