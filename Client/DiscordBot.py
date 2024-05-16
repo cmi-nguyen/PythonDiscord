@@ -1,13 +1,14 @@
-import asyncio
+import io
+import os
+import pickle
+import socket
+import struct
 from typing import Final
 
 import discord
 from discord.ext import commands
-from discord.ext.music import MusicClient, WAVAudio, Track
-
 from dotenv import load_dotenv
-import socket, os
-import threading, wave, pyaudio, pickle, struct
+from pydub import AudioSegment
 
 host_name = socket.gethostname()
 host_ip = socket.gethostbyname(host_name)
@@ -27,6 +28,41 @@ bot = commands.Bot(command_prefix='$', intents=intents)
 client = discord.Client(intents=intents)
 
 
+def audio_stream():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((socket.gethostname(), port))
+
+    msg = s.recv(1024)
+    print(msg)
+    s.send(bytes("Play", "utf-8"))
+    data = b""
+    payload_size = struct.calcsize("Q")
+    stream = open("test.mp3", 'wb')
+    while True:
+        try:
+            while len(data) < payload_size:
+                packet = s.recv(4 * 1024)  # 4K
+                if not packet:
+                    break
+                data += packet
+            packed_msg_size = data[:payload_size]
+            data = data[payload_size:]
+            msg_size = struct.unpack("Q", packed_msg_size)[0]
+            while len(data) < msg_size:
+                data += s.recv(4 * 1024)
+            frame_data = data[:msg_size]
+            data = data[msg_size:]
+            frame = pickle.loads(frame_data)
+            stream.write(frame)
+
+        except:
+
+            break
+
+    s.close()
+    print('Audio Created')
+
+
 @bot.event
 async def on_ready():
     print('Bot is ready')
@@ -38,22 +74,16 @@ async def test(ctx, arg):
 
 
 # play command
-@bot.command()
+@bot.command(pass_context=True)
 async def play(ctx, arg1: str):
     print(f'You passed {arg1}')
     if ctx.author.voice:
-        channel = ctx.message.author.voice.channel
-        voice_client = await channel.connect()
-        await ctx.send("Đã kết nối")
-        # call socket
-        # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #  s.connect((socket.gethostname(), port))
-        #  res = s.recv(1024)
-        #  print(res)
-        #  s.send(bytes("Play", "utf-8"))
-        #  wave_file = s.recv(1024)
-        # test play
-        voice_client.play(discord.FFmpegPCMAudio('more than words.wav'))
+        # channel = ctx.message.author.voice.channel
+        # voice_client = await channel.connect()
+        voice_client = ctx.guild.voice_client
+        audio_stream()
+
+        voice_client.play(discord.FFmpegPCMAudio("test.mp3"))
 
     else:
         await ctx.send("Bạn không trong kênh giọng nói nào cả")
@@ -73,7 +103,7 @@ async def connect(ctx):
 @bot.command(pass_context=True)
 async def disconnect(ctx):
     await ctx.guild.voice_client.disconnect()
-    await ctx.send("Disconnected")
+    await ctx.send("Đã ngắt kết nối")
 
 
 # pause command
