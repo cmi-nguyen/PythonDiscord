@@ -90,7 +90,6 @@ def audio_stream(arg: str):
 
 
 song_list = []
-queue = []
 
 
 @bot.event
