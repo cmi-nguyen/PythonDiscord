@@ -1,14 +1,13 @@
-import io
 import os
 import pickle
 import socket
 import struct
+from pathlib import Path
 from typing import Final
 
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from pydub import AudioSegment
 
 host_name = socket.gethostname()
 host_ip = socket.gethostbyname(host_name)
@@ -28,16 +27,41 @@ bot = commands.Bot(command_prefix='$', intents=intents)
 client = discord.Client(intents=intents)
 
 
-def audio_stream():
+def get_song_list():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((socket.gethostname(), port))
+    msg = s.recv(1024)
+    print(msg)
+    s.send(bytes("List", "utf-8"))
+    res = s.recv(1024)
+
+
+def search_song(arg: str):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((socket.gethostname(), port))
+
+    msg = s.recv(1024)
+    print(msg)
+    s.send(bytes("Search", "utf-8"))
+    s.send(bytes(arg, "utf-8"))
+    res = s.recv(1024).decode("utf-8")
+    if res == '404':
+        return False
+    return True
+
+
+def audio_stream(arg: str):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((socket.gethostname(), port))
 
     msg = s.recv(1024)
     print(msg)
     s.send(bytes("Play", "utf-8"))
+    s.send(bytes(arg, "utf-8"))
     data = b""
+    data2 = Path('./stream/' + 'streaming_file' + '.mp3')
     payload_size = struct.calcsize("Q")
-    stream = open("test.mp3", 'wb')
+    # stream = open("stream/test2.mp3", 'wb')
     while True:
         try:
             while len(data) < payload_size:
@@ -53,14 +77,20 @@ def audio_stream():
             frame_data = data[:msg_size]
             data = data[msg_size:]
             frame = pickle.loads(frame_data)
-            stream.write(frame)
-
+            # stream.write(frame)
+            data2.write_bytes(frame)
+            s.send(b"close")
         except:
 
             break
 
     s.close()
     print('Audio Created')
+    return True
+
+
+song_list = []
+queue = []
 
 
 @bot.event
@@ -77,14 +107,17 @@ async def test(ctx, arg):
 @bot.command(pass_context=True)
 async def play(ctx, arg1: str):
     print(f'You passed {arg1}')
+    voice_client = ctx.guild.voice_client
     if ctx.author.voice:
-        # channel = ctx.message.author.voice.channel
+        channel = ctx.message.author.voice.channel
         # voice_client = await channel.connect()
-        voice_client = ctx.guild.voice_client
-        audio_stream()
-
-        voice_client.play(discord.FFmpegPCMAudio("test.mp3"))
-
+        if voice_client.is_playing():
+            voice_client.stop()
+        if search_song(arg1):
+            audio_stream(arg1)
+            voice_client.play(discord.FFmpegPCMAudio("./stream/streaming_file.mp3"))
+        else:
+            await ctx.send(f"Không tìm thấy bài hát: {arg1}")
     else:
         await ctx.send("Bạn không trong kênh giọng nói nào cả")
 
@@ -104,6 +137,8 @@ async def connect(ctx):
 async def disconnect(ctx):
     await ctx.guild.voice_client.disconnect()
     await ctx.send("Đã ngắt kết nối")
+    if os.path.exists("./stream/streaming_file.mp3"):
+        os.remove("./stream/streaming_file.mp3")
 
 
 # pause command
